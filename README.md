@@ -3,6 +3,12 @@
 
 **Beware! Defuddle is very much a work in progress!**
 
+> **Fork status:** This branch currently preserves the Defuddle 0.19.4
+> behavior baseline. The planned HTML2What document-extraction architecture
+> and migration sequence are documented in
+> [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md). Target architecture
+> in that document must not be described as already implemented.
+
 Defuddle extracts the main content from web pages. It cleans up web pages by removing clutter like comments, sidebars, headers, footers, and other non-essential elements, leaving only the primary content.
 
 ## Overview

@@ -2,11 +2,19 @@
 
 Extracts main content from web pages as clean HTML.
 
+## Fork direction
+
+- Current `main` is the Defuddle 0.19.4 behavior baseline; the target HTML2What architecture is specified in `docs/architecture.zh-CN.md`.
+- Keep current behavior and target design distinct in code, tests, and documentation.
+- Before structural refactoring, freeze intermediate HTML/Profile output as well as Markdown output.
+- Mechanical extraction and behavior changes must be separate steps; do not reorder the current pipeline while claiming a zero-diff split.
+- All source paths, including site/API extractors, must eventually converge on one normalization and Profile validation boundary.
+
 ## Project structure
 
 - `src/defuddle.ts` — Core parsing pipeline
 - `src/standardize.ts` — HTML normalization (headings, code blocks, footnotes)
-- `src/scoring.ts` — Content scoring to remove non-content blocks
+- `src/removals/scoring.ts` — Content scoring to remove non-content blocks
 - `src/constants.ts` — Exact/partial selectors for clutter removal
 - `src/elements/` — Element-specific rules (code, footnotes, math)
 - `src/extractors/` — Site-specific extractors
@@ -48,15 +56,17 @@ Always use `curl` when testing the Worker or defuddle.md — do not open URLs in
 1. Flatten shadow DOM (`flattenShadowRoots`)
 2. Resolve React streaming SSR (`resolveStreamedContent`)
 3. Find main content (auto-detection or `contentSelector`)
-4. `standardizeFootnotes` — runs before removals because CSS sidenotes use `display:none`
-5. `standardizeCallouts` — converts GitHub alerts, Bootstrap alerts, callout asides to `blockquote[data-callout]` before selector removal strips `.alert` etc.
-6. `removeSmallImages`
-7. `removeHiddenElements`
-8. `removeLowScoring`
-9. `removeBySelector` — exact and partial selectors from `src/constants.ts`
-10. `removeByContentPattern` — content-based removal (read time, boilerplate, article cards)
-11. `standardizeContent` — HTML normalization
-12. Resolve relative URLs
+4. Remove adjacent metadata blocks and adopt external footnotes
+5. `standardizeFootnotes` — runs before removals because CSS sidenotes use `display:none`
+6. `standardizeCallouts` — converts GitHub alerts, Bootstrap alerts, callout asides before selector removal strips `.alert` etc.
+7. `removeSmallImages`
+8. `removeHiddenElements`
+9. `removeEyebrowLabel`
+10. `removeBySelector` — exact and partial selectors from `src/constants.ts`
+11. `removeLowScoring`
+12. `removeByContentPattern` — content-based removal (read time, boilerplate, article cards)
+13. `standardizeContent` — final HTML normalization
+14. Resolve relative URLs, deduplicate images, and sanitize the final output
 
 ### Pipeline toggles
 
@@ -68,7 +78,7 @@ new Defuddle(document, {
   removeExactSelectors: false,
   removePartialSelectors: false,
   removeContentPatterns: false,
-  standardize: false,  // disables standardizeFootnotes and standardizeContent
+  standardize: false,  // disables footnote/callout recovery and final standardization
   includeReplies: false, // excludes replies from extractors like Reddit, HN, GitHub, Twitter/X
 }).parse();
 ```
