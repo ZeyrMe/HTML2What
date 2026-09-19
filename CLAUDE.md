@@ -5,6 +5,7 @@ Extracts main content from web pages as clean HTML.
 ## Fork direction
 
 - Current `main` is the Defuddle 0.19.4 behavior baseline; the target HTML2What architecture is specified in `docs/architecture.zh-CN.md`.
+- Current implementation scope is the successor engine only. Do not create extension code, `chrome.*` integrations, popup, picker, storage, permissions, or subscription-update code in this project yet.
 - Keep current behavior and target design distinct in code, tests, and documentation.
 - Before structural refactoring, freeze intermediate HTML/Profile output as well as Markdown output.
 - Mechanical extraction and behavior changes must be separate steps; do not reorder the current pipeline while claiming a zero-diff split.
