@@ -39,7 +39,7 @@ Markdown 是一个输出投影，不是系统的中间真相。
 6. 全局、生态、平台、站点只是知识组织方式，不进入运行时 schema 成为 `level`。
 7. 导出阶段不读取网页、订阅或用户规则；所有映射和降级策略随 exporter 内置并版本化。
 8. 平台 API 是可选 source adapter。可用时优先，失败、未授权或数据不完整时回退 DOM 管线。
-9. 浏览器扩展是第一个宿主，不是核心引擎的所有者。`core` 和 `picker` 不依赖 `chrome.*`。
+9. 最终产出两个项目：一个是 Defuddle 的继承者引擎，一个是独立的浏览器扩展。引擎内部是模块化单体，扩展通过 NPM 包使用它。
 10. golden 页面、规范输出和失败诊断是核心资产，规则与 handler 可以借助 LLM 生成初稿，但必须通过契约校验和 golden 回归。
 
 ## 3. 为什么选择当前执行顺序
@@ -198,14 +198,22 @@ Profile 规范由一张可审查的行为表定义：
 
 ## 7. 规则与 handler
 
-目标目录：
+规则在语义上由两部分组成：
+
+1. 声明式部分：URL/DOM 匹配、selector、参数和 handler 引用。
+2. 代码部分：不可避免的规范化处理 handler。
+
+这两部分可以在源码中分目录，但不能当成两个互不相关的产品。一个完整规则必须绑定到具体 handler 和兼容版本，并作为一个联合能力测试和发布。
+
+继承者引擎内部的目标目录：
 
 ```text
-packages/rules-web/
-├── filter/                 # ABP 子集及过滤数据
-├── find/                   # URL + W3C selector 数据
-├── normalize/rules/        # 指纹到 handler 的引用
-└── normalize/handlers/     # recover/finalize handler 代码
+html2what-engine/
+├── src/core/               # 管线、Profile、规则运行时、handler registry
+├── src/handlers/           # recover/finalize 的规范化代码
+├── src/rules/              # 官方 selector、match、参数和 handler 引用
+├── src/exporters/           # commonmark/gfm/obsidian/html/plain
+└── fixtures/                # 规则与 handler 的联合 golden 语料
 ```
 
 规则模型：
@@ -217,7 +225,7 @@ match(URL 轴, DOM 轴) + action/handler reference
 约束：
 
 - 匹配可声明，复杂变换必须是代码。
-- handler 引用、选择器语法和指纹冲突在构建期校验。
+- handler 引用、handler 版本、选择器语法和指纹冲突在构建期校验。
 - handler 注册时声明运行在 `recover` 或 `normalize`；这是调度信息，不是业务层级。
 - 执行顺序按阶段、依赖和特异性确定，平局才使用规则包顺序。
 - handler 防重入，重复执行不得破坏结果。
@@ -226,11 +234,11 @@ match(URL 轴, DOM 轴) + action/handler reference
 
 | 住所 | 内容 | 更新方式 |
 | --- | --- | --- |
-| 官方包 | 数据、handler、基线策略 | 随版本发布 |
-| 订阅源 | 仅数据和已知 handler 引用 | 锁版本更新并跑 golden |
+| 引擎内置规则 | 官方数据、handler 引用和基线策略 | 与引擎统一版本发布 |
+| 外部订阅源 | 仅数据、参数和已知 handler 引用 | 锁定引擎兼容范围并跑 golden |
 | 用户记忆 | find selector 集合 | 用户明确保存 |
 
-远程内容永远是数据，不能包含可执行代码，以满足 MV3 要求。
+外部规则只能引用引擎已经提供的 handler。远程内容永远是数据，不能包含可执行代码，以满足 MV3 要求。
 
 ## 8. Source adapter
 
@@ -246,26 +254,32 @@ adapter 契约必须声明：
 
 adapter 不能直接绕过 Profile。API、站点 extractor 和普通 DOM 最终都必须返回统一的 source document，再进入 `recover -> filter -> normalize`。
 
-## 9. 目标代码组织
+## 9. 两个项目的代码组织
 
 ```text
-packages/
-├── core/         # read 管线、阶段契约、Profile、validator、handler registry
-├── rules-web/    # 网页规则数据和 handler
-├── exporters/    # commonmark/gfm/obsidian/html/plain
-├── picker/       # DOM 高亮、点选、扩大/缩小、selector 生成
-└── extension/    # MV3 壳，唯一认识 chrome API 的包
-fixtures/         # 原始页面、Profile golden、各 exporter golden
-docs/             # 架构、Profile 行为表、attribution
+html2what-engine/                 # Defuddle 的继承者，模块化单体
+├── src/core/                     # read 管线、Profile、validator、规则运行时
+├── src/handlers/                 # 规范化处理代码
+├── src/rules/                    # 官方声明式规则，与 handlers 配对
+├── src/exporters/                # commonmark/gfm/obsidian/html/plain
+├── fixtures/                     # 原始页面、Profile 和 exporter golden
+└── docs/                         # 架构、Profile 行为表、attribution
+
+html2what-extension/              # 独立 MV3 宿主
+├── src/picker/                   # DOM 高亮、点选、扩大/缩小、selector 生成
+├── src/popup/                    # 预览和导出交互
+└── src/                         # chrome API、storage、订阅更新和权限
 ```
 
 依赖边界：
 
-- `core` 不包含站点规则，不导入 `chrome.*`。
-- `picker` 不导入 `chrome.*`。
-- `rules-web` 依赖 core 契约，core 不反向依赖规则包。
-- exporter 只依赖 Profile，不依赖网页规则或 extractor。
-- extension 负责权限、storage、订阅更新和 UI 编排。
+- 引擎项目不导入 `chrome.*`，也不包含扩展 UI、storage 或权限。
+- 引擎内的 `core`、`handlers`、`rules`、`exporters` 是内部模块，不是必须独立发布的产品。
+- 官方 rules 与 handlers 在同一个引擎版本中原子配对。
+- 外部规则包只能依赖已发布的 handler ABI，不得注入远程代码。
+- exporter 只依赖 Profile，不依赖扩展或宿主 API。
+- 扩展项目只负责权限、storage、订阅更新、picker 和 UI 编排，并通过 NPM 引入引擎。
+- NPM 发布的第一目标是完整引擎包；是否以后把 handlers 或 exporters 拆成子包，等接口稳定后再决定。
 
 ## 10. 分叉与上游纪律
 
@@ -282,6 +296,7 @@ Git 操作要求：
 2. 增加只读语义的 `upstream` remote 指向 Defuddle 原仓库。
 3. 机械拆分期间不混入新功能和行为修正。
 4. 上游修复按明确 commit 移植，并单独运行 corpus 回归。
+5. 引擎项目和扩展项目的发布节奏可以不同，但扩展必须声明兼容的引擎版本范围。
 
 ## 11. 当前基线事实
 
@@ -304,7 +319,7 @@ Git 操作要求：
 6. fixture 缺失 expected 时测试会自动生成 baseline 并通过，尚未形成严格门禁。
 7. 只有少量 fixture 校验中间 HTML，当前 corpus 主要锁定最终 Markdown。
 8. 代理测试依赖假域名不可连接，受真实 DNS/网络环境影响。
-9. 所有站点 extractor 和大量规则静态编入 core。
+9. 所有站点 extractor、大量规则和 handler 当前仍静态编入同一个 Defuddle 基线；目标是把它们在继承者项目内部分层，而不是先拆成多个互不兼容的产品。
 10. 当前仓库尚未配置 `upstream` remote。
 
 ## 12. 实施顺序
@@ -341,11 +356,11 @@ Git 操作要求：
 ### 阶段 D：统一来源和规则边界
 
 - 让所有 extractor/API adapter 进入同一后续管线。
-- 将站点 selector、过滤数据和 handler 映射移入 `rules-web`。
+- 在引擎项目内部把站点 selector、过滤数据和 handler 映射移入 `src/rules/`，把规范化代码移入 `src/handlers/`，并在编译产物中绑定二者。
 - 实现规则编译、索引、冲突检查和悬空引用检查。
 - 优先实现 KaTeX/MathJax、Prism/highlight.js、懒加载图片和脚注家族。
 
-退出条件：core 不包含站点规则，新增组件家族不需要修改管线代码。
+退出条件：引擎的管线不包含站点分支；新增组件家族只需在引擎内部增加 handler 和配套规则，不需要修改扩展。
 
 ### 阶段 E：拆分 exporter
 
@@ -356,15 +371,15 @@ Git 操作要求：
 
 退出条件：exporter 不访问网页规则；每种 Profile 行为都有目标格式结果或显式降级。
 
-### 阶段 F：扩展、picker 和订阅
+### 阶段 F：独立扩展、picker 和订阅
 
-- 建立 MV3 薄壳。
+- 建立独立的 `html2what-extension` 项目，通过 NPM 引入完整引擎包。
 - 自动模式显示正文和标题定位结果。
 - 手动模式支持 hover、点选、扩大、缩小和回退。
 - “记住此选择”保存 selector 集合，失效后自动回退寻找阶段。
 - 订阅规则锁版本，更新前运行内置 golden 子集。
 
-退出条件：核心库可独立运行，扩展只负责宿主能力，规则更新不执行远程代码。
+退出条件：引擎可独立用于 Node、CLI、服务端和其他宿主；扩展只负责宿主能力，规则更新不执行远程代码。
 
 ## 13. 质量门禁
 

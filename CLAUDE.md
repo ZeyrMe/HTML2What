@@ -8,6 +8,9 @@ Extracts main content from web pages as clean HTML.
 - Keep current behavior and target design distinct in code, tests, and documentation.
 - Before structural refactoring, freeze intermediate HTML/Profile output as well as Markdown output.
 - Mechanical extraction and behavior changes must be separate steps; do not reorder the current pipeline while claiming a zero-diff split.
+- The successor engine is a modular monolith: core, handlers, official rules, and exporters stay in one versioned project until their contracts are stable.
+- The browser extension is a separate project that imports the engine package; it owns Chrome APIs, UI, picker, storage, and subscription updates.
+- Selector/match data and normalization handler code may live in separate source directories, but they form one versioned rule capability and must be tested together.
 - All source paths, including site/API extractors, must eventually converge on one normalization and Profile validation boundary.
 
 ## Project structure
